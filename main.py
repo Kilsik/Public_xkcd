@@ -32,7 +32,7 @@ def download_random_comic():
     return img_filename, comment
 
 
-def get_photo_adr(headers, params):
+def get_upload_server_addr(headers, params):
     ''' Получаем адрес сервера для загрузки комикса в vk '''
 
     vk_url = 'https://api.vk.com/method/photos.getWallUploadServer'
@@ -41,15 +41,14 @@ def get_photo_adr(headers, params):
     return response.json()
 
 
-def upload_photo(url, photo):
+def upload_photo(url, img_filename):
     ''' Загружаем картинку комикса на сервер vk '''
 
-    with open(photo, 'rb') as file:
+    with open(img_filename, 'rb') as file:
         vk_file = {
             'photo': file,
             }
         response = requests.post(url, files=vk_file)
-    os.remove(photo)
     response.raise_for_status()
     return response.json()
 
@@ -98,16 +97,19 @@ if __name__ == '__main__':
         'group_id': vk_group_id,
         'v': vk_ver,
         }
-    wall_upload_server = get_photo_adr(vk_headers, vk_params)
+    wall_upload_server = get_upload_server_addr(vk_headers, vk_params)
     try:
         upload_url = wall_upload_server['response']['upload_url']
     except KeyError:
         print(wall_upload_server['error']['error_msg'])
+        os.remove(img_filename)
         sys.exit()
     try:
         upload_response = upload_photo(upload_url, img_filename)
-    except FileNotFoundError:
+    except (FileNotFoundError, KeyError):
         print(f'Image file {img_filename} not found')
+    finally:
+        os.remove(img_filename)
     photo = upload_response["photo"]
     server = upload_response["server"]
     vk_hash = upload_response["hash"]
