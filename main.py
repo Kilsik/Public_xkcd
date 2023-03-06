@@ -49,18 +49,15 @@ def get_upload_server_addr(token, group_id, ver):
     return response.json()['response']['upload_url']
 
 
-def is_response_good(response, filename=None):
+def is_response_good(response):
     '''
-    Проверяем ответ от vk и в случае ошибки удаляем файл картинки
-    если он есть
+    Проверяем ответ от vk
     '''
 
-    if not 'error' in response:
-        return None
-    print(response['error']['error_msg'])
-    if os.path.isfile(filename):
-        os.remove(filename)
-        sys.exit()
+    checking_response = response.json()
+    if not 'error' in checking_response:
+        return True
+    print(checking_response['error']['error_msg'])
 
 
 def upload_photo(url, img_filename):
@@ -72,7 +69,7 @@ def upload_photo(url, img_filename):
             }
         response = requests.post(url, files=vk_file)
     response.raise_for_status()
-    is_response_good(response, img_filename)
+    is_response_good(response)
     photo = response.json()["photo"]
     server = response.json()["server"]
     vk_hash = response.json()["hash"]
@@ -130,11 +127,16 @@ if __name__ == '__main__':
     vk_ver = '5.131'
     vk_group_id = os.environ['VK_XKCD_ID']
     img_filename, comment = download_random_comic()
-    upload_url = get_upload_server_addr(vk_token, vk_group_id, vk_ver)
-    photo, sever, vk_hash = upload_photo(upload_url, img_filename)
-    os.remove(img_filename)
-    owner_id, media_id = save_wall_photo(vk_token, vk_group_id, vk_ver, photo,
-        server, vk_hash)
-    post_id = publish(vk_token, vk_group_id, owner_id, media_id, comment,
+    try:
+        upload_url = get_upload_server_addr(vk_token, vk_group_id, vk_ver)
+        photo, server, vk_hash = upload_photo(upload_url, img_filename)
+        owner_id, media_id = save_wall_photo(vk_token, vk_group_id, vk_ver,
+            photo, server, vk_hash)
+        post_id = publish(vk_token, vk_group_id, owner_id, media_id, comment,
         vk_ver)
-    print(post_id)
+        print(post_id)
+    except KeyError:
+        pass
+    finally:
+        if os.path.isfile(img_filename):
+            os.remove(img_filename)
