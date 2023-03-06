@@ -32,13 +32,35 @@ def download_random_comic():
     return img_filename, comment
 
 
-def get_upload_server_addr(headers, params):
+def get_upload_server_addr(token, group_id, ver):
     ''' Получаем адрес сервера для загрузки комикса в vk '''
 
+    headers = {
+        'Authorization': f'Bearer {token}'
+        }
+    params = {
+        'group_id': group_id,
+        'v': ver,
+        }
     vk_url = 'https://api.vk.com/method/photos.getWallUploadServer'
     response = requests.get(vk_url, headers=headers, params=params)
     response.raise_for_status()
-    return response.json()
+    is_response_good(response)
+    return response.json()['response']['upload_url']
+
+
+def is_response_good(response, filename=None):
+    '''
+    Проверяем ответ от vk и в случае ошибки удаляем файл картинки
+    если он есть
+    '''
+
+    if not 'error' in response:
+        return None
+    print(response['error']['error_msg'])
+    if os.path.isfile(filename):
+        os.remove(filename)
+        sys.exit()
 
 
 def upload_photo(url, img_filename):
@@ -50,24 +72,41 @@ def upload_photo(url, img_filename):
             }
         response = requests.post(url, files=vk_file)
     response.raise_for_status()
-    return response.json()
+    is_response_good(response, img_filename)
+    photo = response.json()["photo"]
+    server = response.json()["server"]
+    vk_hash = response.json()["hash"]
+    return photo, server, vk_hash
 
 
-def save_wall_photo(headers, params, photo, server, vk_hash):
+def save_wall_photo(token, group_id, ver, photo, server, vk_hash):
     ''' Сохраняем загруженное изображение на сервере '''
 
-    params['photo'] = photo
-    params['server'] = server
-    params['hash'] = vk_hash
+    headers = {
+        'Authorization': f'Bearer {token}'
+        }
+    params = {
+        'group_id': group_id,
+        'v': ver,
+        'photo': = photo,
+        'server': = server,
+        'hash': = vk_hash,
+        }
     url ='https://api.vk.com/method/photos.saveWallPhoto'
     response = requests.post(url, headers=headers, params=params)
     response.raise_for_status()
-    return response.json()
+    is_response_good(response)
+    owner_id = response.json()["response"][0]["owner_id"]
+    media_id = response.json()["response"][0]["id"]
+    return owner_id, media_id
 
 
-def publish(headers, group_id, owner_id, media_id, msg, ver):
+def publish(token, group_id, owner_id, media_id, msg, ver):
     ''' Публикуем комикс в сообществе фанатов в vk '''
 
+    headers = {
+        'Authorization': f'Bearer {token}'
+        }
     vk_params = {
         'v': ver,
         'owner_id': f'-{group_id}',
@@ -78,6 +117,7 @@ def publish(headers, group_id, owner_id, media_id, msg, ver):
     url = 'https://api.vk.com/method/wall.post'
     response = requests.post(url, headers=headers, params=vk_params)
     response.raise_for_status()
+    is_response_good(response)
     return response.json()
 
 
@@ -90,33 +130,11 @@ if __name__ == '__main__':
     vk_ver = '5.131'
     vk_group_id = os.environ['VK_XKCD_ID']
     img_filename, comment = download_random_comic()
-    vk_headers = {
-        'Authorization': f'Bearer {vk_token}'
-        }
-    vk_params = {
-        'group_id': vk_group_id,
-        'v': vk_ver,
-        }
-    wall_upload_server = get_upload_server_addr(vk_headers, vk_params)
-    try:
-        upload_url = wall_upload_server['response']['upload_url']
-    except KeyError:
-        print(wall_upload_server['error']['error_msg'])
-        os.remove(img_filename)
-        sys.exit()
-    try:
-        upload_response = upload_photo(upload_url, img_filename)
-    except (FileNotFoundError, KeyError):
-        print(f'Image file {img_filename} not found')
-    finally:
-        os.remove(img_filename)
-    photo = upload_response["photo"]
-    server = upload_response["server"]
-    vk_hash = upload_response["hash"]
-    save_response = save_wall_photo(vk_headers, vk_params, photo, server,
-        vk_hash)
-    owner_id = save_response["response"][0]["owner_id"]
-    media_id = save_response["response"][0]["id"]
-    post_id = publish(vk_headers, vk_group_id, owner_id, media_id, comment,
+    upload_url = get_upload_server_addr(vk_token, vk_group_id, vk_ver)
+    photo, sever, vk_hash = upload_photo(upload_url, img_filename)
+    os.remove(img_filename)
+    owner_id, media_id = save_wall_photo(vk_token, vk_group_id, vk_ver, photo,
+        server, vk_hash)
+    post_id = publish(vk_token, vk_group_id, owner_id, media_id, comment,
         vk_ver)
     print(post_id)
