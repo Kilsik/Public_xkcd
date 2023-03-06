@@ -88,9 +88,9 @@ def save_wall_photo(token, group_id, ver, photo, server, vk_hash):
     params = {
         'group_id': group_id,
         'v': ver,
-        'photo': = photo,
-        'server': = server,
-        'hash': = vk_hash,
+        'photo':  photo,
+        'server':  server,
+        'hash':  vk_hash,
         }
     url ='https://api.vk.com/method/photos.saveWallPhoto'
     response = requests.post(url, headers=headers, params=params)
