@@ -8,6 +8,14 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 
+class VKException(Exception):
+    '''
+    Ловим ответы с ошибками от vk
+    '''
+    def __init__(self, text):
+        self.txt = text
+
+
 def download_random_comic():
     ''' Скачиваем случайный комикс '''
 
@@ -55,9 +63,8 @@ def is_response_good(response):
     '''
 
     checking_response = response.json()
-    if not 'error' in checking_response:
-        return True
-    print(checking_response['error']['error_msg'])
+    if 'error' in checking_response:
+        raise VKException(checking_response['error']['error_msg'])
 
 
 def upload_photo(url, img_filename):
@@ -70,9 +77,10 @@ def upload_photo(url, img_filename):
         response = requests.post(url, files=vk_file)
     response.raise_for_status()
     is_response_good(response)
-    photo = response.json()["photo"]
-    server = response.json()["server"]
-    vk_hash = response.json()["hash"]
+    response_params = response.json()
+    photo = response_params["photo"]
+    server = response_params["server"]
+    vk_hash = response_params["hash"]
     return photo, server, vk_hash
 
 
@@ -93,12 +101,13 @@ def save_wall_photo(token, group_id, ver, photo, server, vk_hash):
     response = requests.post(url, headers=headers, params=params)
     response.raise_for_status()
     is_response_good(response)
-    owner_id = response.json()["response"][0]["owner_id"]
-    media_id = response.json()["response"][0]["id"]
+    response_params = response.json()
+    owner_id = response_params["response"][0]["owner_id"]
+    media_id = response_params["response"][0]["id"]
     return owner_id, media_id
 
 
-def publish(token, group_id, owner_id, media_id, msg, ver):
+def publish_comic_to_vk(token, group_id, owner_id, media_id, msg, ver):
     ''' Публикуем комикс в сообществе фанатов в vk '''
 
     headers = {
@@ -132,11 +141,11 @@ if __name__ == '__main__':
         photo, server, vk_hash = upload_photo(upload_url, img_filename)
         owner_id, media_id = save_wall_photo(vk_token, vk_group_id, vk_ver,
             photo, server, vk_hash)
-        post_id = publish(vk_token, vk_group_id, owner_id, media_id, comment,
-        vk_ver)
+        post_id = publish_comic_to_vk(vk_token, vk_group_id, owner_id, media_id,
+            comment, vk_ver)
         print(post_id)
-    except KeyError:
-        pass
+    except VKException as error:
+        print(error)
     finally:
         if os.path.isfile(img_filename):
             os.remove(img_filename)
